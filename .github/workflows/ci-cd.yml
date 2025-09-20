@@ -3,7 +3,17 @@ name: Deployment Pipeline
 on:
   push:
     branches:
-      - main  # Runs after PRs are merged into main
+      - main  # Run on push to main branch
+  workflow_dispatch:  # Allow manual triggers with environment choice
+    inputs:
+      environment:
+        description: 'Select environment to deploy'
+        required: true
+        default: production
+        type: choice
+        options:
+          - staging
+          - production
 
 jobs:
   build:
@@ -14,7 +24,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
@@ -42,7 +52,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
@@ -51,19 +61,22 @@ jobs:
         run: npm install
 
       - name: Run tests
-        run: echo "No tests yet" # Replace with `npm test` when tests are ready
+        run: echo "No tests yet"  # Replace with `npm test` when ready
 
   migrate:
-    name: Run Database Migration
-    runs-on: self-hosted
+    name: Database Migration
+    runs-on: ubuntu-latest
     needs: test
     environment:
-      name: production         # Requires manual approval
+      name: ${{ github.event.inputs.environment }}
+      url: http://10.185.125.191:3000/
+    if: github.event_name == 'workflow_dispatch'  # Manual trigger only
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
@@ -74,15 +87,18 @@ jobs:
       - name: Run DB migration
         run: |
           echo "Running DB migration"
-          # npx prisma migrate deploy   # Uncomment and customize
+          # Uncomment and update to your migration command:
+          # npx prisma migrate deploy
 
   deploy:
     name: Deploy Application
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: migrate
     environment:
-      name: production        # Uses same manual approval gate
-      url: http://localhost:3000
+      name: ${{ github.event.inputs.environment }}
+      url: http://10.185.125.191:3000/
+    if: github.event_name == 'workflow_dispatch'  # Manual trigger only
+
     steps:
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -90,15 +106,12 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Stop any existing container
-        run: |
-          docker stop app || true
-          docker rm app || true
-
       - name: Pull and run Docker container
         run: |
           docker pull ${{ secrets.DOCKER_USERNAME }}/app:latest
+          docker stop app || true
+          docker rm app || true
           docker run -d -p 3000:3000 --name app ${{ secrets.DOCKER_USERNAME }}/app:latest
 
-      - name: Verify Deployment
+      - name: Verify deployment
         run: docker ps
