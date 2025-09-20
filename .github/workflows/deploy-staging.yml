@@ -1,0 +1,25 @@
+name: Deploy to Staging
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Migrate database (staging)
+        run: echo "Running staging migration..." # e.g. npx prisma migrate deploy
+
+      - name: Deploy to Staging
+        run: echo "Deploying to staging..." # Replace with real logic
