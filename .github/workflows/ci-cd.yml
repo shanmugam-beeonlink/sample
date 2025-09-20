@@ -3,7 +3,7 @@ name: Local Deployment Pipeline
 on:
   push:
     branches:
-      - '**'
+      - '**'         # Runs on any branch push
   workflow_dispatch:
     inputs:
       environment:
@@ -85,6 +85,7 @@ jobs:
     name: Deploy Local
     runs-on: ubuntu-latest
     needs: migrate
+    # This job only runs on manual trigger with environment set to 'local'
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'local'
 
     steps:
