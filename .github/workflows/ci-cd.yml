@@ -72,7 +72,7 @@ jobs:
           # npx prisma migrate deploy
 
   deploy-staging:
-    name: Deploy Staging
+    name: Deploy Staging (Local Test)
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'
     needs: migrate
@@ -88,13 +88,13 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Deploy to Staging
+      - name: Local staging deploy test
         run: |
-          echo "Deploying to staging..."
-          # scp/rsync/docker commands here
+          echo "Simulating deploy to staging environment locally"
+          ls -lah
 
   deploy-production:
-    name: Deploy Production
+    name: Deploy Production (Local Test)
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
     needs: migrate
@@ -110,7 +110,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Deploy to Production
+      - name: Local production deploy test
         run: |
-          echo "Deploying to production..."
-          # scp/rsync/docker commands here
+          echo "Simulating deploy to production environment locally"
+          ls -lah
