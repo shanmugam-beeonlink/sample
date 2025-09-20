@@ -3,8 +3,8 @@ name: Deployment Pipeline
 on:
   push:
     branches:
-      - main  # Run on push to main branch
-  workflow_dispatch:  # Allow manual triggers with environment choice
+      - main   # automatic build and test on push
+  workflow_dispatch:   # manual trigger for migrate and deploy with environment input
     inputs:
       environment:
         description: 'Select environment to deploy'
@@ -61,7 +61,7 @@ jobs:
         run: npm install
 
       - name: Run tests
-        run: echo "No tests yet"  # Replace with `npm test` when ready
+        run: echo "No tests yet"  # Replace with `npm test`
 
   migrate:
     name: Database Migration
@@ -70,7 +70,7 @@ jobs:
     environment:
       name: ${{ github.event.inputs.environment }}
       url: http://10.185.125.191:3000/
-    if: github.event_name == 'workflow_dispatch'  # Manual trigger only
+    if: github.event_name == 'workflow_dispatch'   # ONLY runs on manual trigger
 
     steps:
       - name: Checkout code
@@ -87,7 +87,7 @@ jobs:
       - name: Run DB migration
         run: |
           echo "Running DB migration"
-          # Uncomment and update to your migration command:
+          # Uncomment and replace with your actual migration command:
           # npx prisma migrate deploy
 
   deploy:
@@ -97,7 +97,7 @@ jobs:
     environment:
       name: ${{ github.event.inputs.environment }}
       url: http://10.185.125.191:3000/
-    if: github.event_name == 'workflow_dispatch'  # Manual trigger only
+    if: github.event_name == 'workflow_dispatch'   # ONLY runs on manual trigger
 
     steps:
       - name: Login to Docker Hub
