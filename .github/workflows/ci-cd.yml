@@ -3,22 +3,25 @@ name: Full CI/CD Pipeline
 on:
   push:
     branches:
-      - '**'  # Auto-run build/test/migrate on all branches
+      - '**'  # Build & Test on every push
+
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Deploy to environment'
+      action:
+        description: 'Choose manual job to run'
         required: true
-        default: 'staging'
+        default: 'migrate'
         type: choice
         options:
-          - staging
-          - production
+          - migrate
+          - deploy-staging
+          - deploy-production
 
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v3
@@ -35,6 +38,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     needs: build
+    if: github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v3
@@ -53,7 +57,7 @@ jobs:
   migrate:
     name: DB Migrate
     runs-on: ubuntu-latest
-    needs: test
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'migrate'
 
     steps:
       - uses: actions/checkout@v3
@@ -68,14 +72,13 @@ jobs:
 
       - name: Run migration
         run: |
-          echo "Running DB migration"
+          echo "Running database migration"
           # npx prisma migrate deploy
 
   deploy-staging:
     name: Deploy Staging
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'
-    needs: migrate
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy-staging'
 
     steps:
       - uses: actions/checkout@v3
@@ -90,14 +93,13 @@ jobs:
 
       - name: Deploy to Staging
         run: |
-          echo "Deploying to staging..."
-          # scp/rsync/docker commands here
+          echo "Deploying to staging"
+          # Add real deploy logic here
 
   deploy-production:
     name: Deploy Production
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
-    needs: migrate
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy-production'
 
     steps:
       - uses: actions/checkout@v3
@@ -112,5 +114,5 @@ jobs:
 
       - name: Deploy to Production
         run: |
-          echo "Deploying to production..."
-          # scp/rsync/docker commands here
+          echo "Deploying to production"
+          # Add real deploy logic here
