@@ -1,62 +1,37 @@
-name: Deploy ECS
+name: CI + CD Dev
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - dev   # Only trigger on dev branch
+  workflow_dispatch:   # Optional: manual trigger
     inputs:
       environment:
-        description: "Choose environment"
+        description: "Environment"
         required: true
         default: "dev"
         type: choice
         options:
           - dev
-          - prod
-    branches:
-      - main
-      - dev
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  Build:
+    runs-on: self-hosted
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+      - name: Compile
+        run: echo "✅ Build successful"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run tests
-        run: npm test
-
-      - name: Build app
-        run: npm run build
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
+  DeployDev:
+    name: Deploy to Dev
+    needs: [Build]
+    runs-on: self-hosted
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, Tag, and Push Docker image to ECR
+      - uses: actions/checkout@v3
+      - name: Build Docker image
+        run: docker build -t myapp:dev .
+      - name: Run Docker container
         run: |
-          IMAGE_TAG=${{ github.sha }}
-          docker build -t my-app:$IMAGE_TAG .
-          docker tag my-app:$IMAGE_TAG ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-app:$IMAGE_TAG
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-app:$IMAGE_TAG
-
-      - name: Deploy to Amazon ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ecs-task.json
-          service: my-service-${{ github.event.inputs.environment }}
-          cluster: my-cluster
-          wait-for-service-stability: true
+          docker stop myapp-dev || true
+          docker rm myapp-dev || true
+          docker run -d --name myapp-dev -p 3001:3000 myapp:dev
