@@ -9,45 +9,59 @@ on:
 
 jobs:
   Build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted   # run on your own machine with Docker installed
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Compile
-        run: echo Hello, world!
-    
+        run: echo "✅ Build successful"
+
   DeployDev:
-    name: Deploy to Dev 
+    name: Deploy to Dev
     if: github.event_name == 'pull_request'
     needs: [Build]
-    runs-on: ubuntu-latest
-    environment: 
-      name: Development
-      url: 'http://dev.myapp.com'
+    runs-on: self-hosted
     steps:
-      - name: Deploy
-        run: echo I am deploying! 
-    
+      - uses: actions/checkout@v3
+
+      - name: Build Docker image
+        run: docker build -t myapp:dev .
+
+      - name: Run Docker container
+        run: |
+          docker stop myapp-dev || true
+          docker rm myapp-dev || true
+          docker run -d --name myapp-dev -p 3001:3000 myapp:dev
+
   DeployStaging:
-    name: Deploy to Staging 
-    if: github.event.ref == 'refs/heads/main'
+    name: Deploy to Staging
+    if: github.ref == 'refs/heads/main'
     needs: [Build]
-    runs-on: ubuntu-latest
-    environment: 
-      name: Staging
-      url: 'http://test.myapp.com'
+    runs-on: self-hosted
     steps:
-      - name: Deploy
-        run: echo I am deploying! 
-            
+      - uses: actions/checkout@v3
+
+      - name: Build Docker image
+        run: docker build -t myapp:staging .
+
+      - name: Run Docker container
+        run: |
+          docker stop myapp-staging || true
+          docker rm myapp-staging || true
+          docker run -d --name myapp-staging -p 3002:3000 myapp:staging
+
   DeployProd:
-    name: Deploy to Production 
+    name: Deploy to Production
     needs: [DeployStaging]
-    runs-on: ubuntu-latest
-    environment: 
-      name: Production
-      url: 'http://www.myapp.com'
+    runs-on: self-hosted
     steps:
-      - name: Deploy
-        run: echo I am deploying! 
-    
+      - uses: actions/checkout@v3
+
+      - name: Build Docker image
+        run: docker build -t myapp:latest .
+
+      - name: Run Docker container
+        run: |
+          docker stop myapp-prod || true
+          docker rm myapp-prod || true
+          docker run -d --name myapp-prod -p 3000:3000 myapp:latest
