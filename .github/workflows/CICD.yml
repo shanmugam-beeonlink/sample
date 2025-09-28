@@ -22,9 +22,9 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
-      - name: Build Docker image
+      - name: Build Docker image (Dev)
         run: docker build -t myapp:dev .
-      - name: Run Docker container
+      - name: Run Docker container (Dev)
         run: |
           docker stop myapp-dev || true
           docker rm myapp-dev || true
@@ -32,14 +32,14 @@ jobs:
 
   DeployStaging:
     name: Deploy to Staging
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [Build]
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
-      - name: Build Docker image
+      - name: Build Docker image (Staging)
         run: docker build -t myapp:staging .
-      - name: Run Docker container
+      - name: Run Docker container (Staging)
         run: |
           docker stop myapp-staging || true
           docker rm myapp-staging || true
@@ -47,13 +47,14 @@ jobs:
 
   DeployProd:
     name: Deploy to Production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [DeployStaging]
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
-      - name: Build Docker image
+      - name: Build Docker image (Prod)
         run: docker build -t myapp:latest .
-      - name: Run Docker container
+      - name: Run Docker container (Prod)
         run: |
           docker stop myapp-prod || true
           docker rm myapp-prod || true
