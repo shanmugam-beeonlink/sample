@@ -69,8 +69,8 @@ jobs:
         with:
           name: tested-build
 
-      - name: Run staging DB migrations
-        run: npm run migrate:staging
+      # - name: Run staging DB migrations
+      #   run: npm run migrate:staging
 
   # -----------------
   # 4. Production migrate
@@ -85,8 +85,8 @@ jobs:
         with:
           name: tested-build
 
-      - name: Run production DB migrations
-        run: npm run migrate:production
+      # - name: Run production DB migrations
+      #   run: npm run migrate:production
 
   # -----------------
   # 5. Staging deploy
