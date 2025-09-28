@@ -1,23 +1,91 @@
 {
-    "family": "shanmugam-app-task",
-    "executionRoleArn": "arn:aws:iam::587054415775:role/ecsTaskExecutionRole",
-    "networkMode": "awsvpc",
+    "compatibilities": [
+        "EC2",
+        "MANAGED_INSTANCES",
+        "FARGATE"
+    ],
     "containerDefinitions": [
         {
-            "name": "shanmugam-app",
-            "image": "placeholder",
+            "cpu": 0,
+            "environment": [],
+            "environmentFiles": [],
             "essential": true,
+            "image": "587054415775.dkr.ecr.us-east-1.amazonaws.com/my-app",
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/my-app-task",
+                    "awslogs-create-group": "true",
+                    "awslogs-region": "us-east-1",
+                    "awslogs-stream-prefix": "ecs"
+                },
+                "secretOptions": []
+            },
+            "mountPoints": [],
+            "name": "my-app",
             "portMappings": [
                 {
+                    "appProtocol": "http",
                     "containerPort": 3000,
-                    "hostPort": 3000
+                    "hostPort": 3000,
+                    "name": "my-app-3000-tcp",
+                    "protocol": "tcp"
                 }
-            ]
+            ],
+            "systemControls": [],
+            "ulimits": [],
+            "volumesFrom": []
+        }
+    ],
+    "cpu": "1024",
+    "enableFaultInjection": false,
+    "executionRoleArn": "arn:aws:iam::587054415775:role/ecsTaskExecutionRole",
+    "family": "my-app-task",
+    "memory": "3072",
+    "networkMode": "awsvpc",
+    "placementConstraints": [],
+    "registeredAt": "2025-09-28T13:50:14.215Z",
+    "registeredBy": "arn:aws:iam::587054415775:root",
+    "requiresAttributes": [
+        {
+            "name": "com.amazonaws.ecs.capability.logging-driver.awslogs"
+        },
+        {
+            "name": "ecs.capability.execution-role-awslogs"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.ecr-auth"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.19"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.task-iam-role"
+        },
+        {
+            "name": "ecs.capability.execution-role-ecr-pull"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.18"
+        },
+        {
+            "name": "ecs.capability.task-eni"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.29"
         }
     ],
     "requiresCompatibilities": [
         "FARGATE"
     ],
-    "cpu": "256",
-    "memory": "512"
+    "revision": 1,
+    "runtimePlatform": {
+        "cpuArchitecture": "X86_64",
+        "operatingSystemFamily": "LINUX"
+    },
+    "status": "ACTIVE",
+    "taskDefinitionArn": "arn:aws:ecs:us-east-1:587054415775:task-definition/my-app-task:1",
+    "taskRoleArn": "arn:aws:iam::587054415775:role/ecsTaskExecutionRole",
+    "volumes": [],
+    "tags": []
 }

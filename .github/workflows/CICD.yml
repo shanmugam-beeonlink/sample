@@ -9,7 +9,7 @@ on:
 
 env:
   AWS_REGION: ap-south-1
-  ECR_REPOSITORY: shanmugam-app
+  ECR_REPOSITORY: my-app
 
 jobs:
   # -----------------
@@ -125,14 +125,14 @@ jobs:
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: ecs-task-def.json
-          container-name: shanmugam-app
+          container-name: my-app
           image: ${{ env.IMAGE }}
 
       - name: Deploy to Staging ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: shanmugam-app-task-service-zw4fubk4
+          service: my-app-task-service-fce9fefl
           cluster: fuzzy-panda-t969wx
           wait-for-service-stability: true
 
@@ -172,13 +172,13 @@ jobs:
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: ecs-task-def.json
-          container-name: shanmugam-app
+          container-name: my-app
           image: ${{ env.IMAGE }}
 
       - name: Deploy to Production ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: shanmugam-app-prod-service
+          service: my-app-prod-service
           cluster: my-ecs-cluster
           wait-for-service-stability: true
