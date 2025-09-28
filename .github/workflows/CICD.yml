@@ -9,10 +9,9 @@ on:
 
 jobs:
   Build:
-    runs-on: self-hosted   # run on your own machine with Docker installed
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
-
       - name: Compile
         run: echo "✅ Build successful"
 
@@ -23,10 +22,8 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
-
       - name: Build Docker image
         run: docker build -t myapp:dev .
-
       - name: Run Docker container
         run: |
           docker stop myapp-dev || true
@@ -40,10 +37,8 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
-
       - name: Build Docker image
         run: docker build -t myapp:staging .
-
       - name: Run Docker container
         run: |
           docker stop myapp-staging || true
@@ -56,10 +51,8 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
-
       - name: Build Docker image
         run: docker build -t myapp:latest .
-
       - name: Run Docker container
         run: |
           docker stop myapp-prod || true
