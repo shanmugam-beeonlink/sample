@@ -1,61 +1,62 @@
-name: CI + CD
+name: Deploy ECS
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Choose environment"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - prod
+    branches:
+      - main
+      - dev
 
 jobs:
-  Build:
-    runs-on: self-hosted
+  build:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Compile
-        run: echo "✅ Build successful"
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-  DeployDev:
-    name: Deploy to Dev
-    if: github.event_name == 'pull_request'
-    needs: [Build]
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build Docker image (Dev)
-        run: docker build -t myapp:dev .
-      - name: Run Docker container (Dev)
-        run: |
-          docker stop myapp-dev || true
-          docker rm myapp-dev || true
-          docker run -d --name myapp-dev -p 3001:3000 myapp:dev
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
 
-  DeployStaging:
-    name: Deploy to Staging
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [Build]
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build Docker image (Staging)
-        run: docker build -t myapp:staging .
-      - name: Run Docker container (Staging)
-        run: |
-          docker stop myapp-staging || true
-          docker rm myapp-staging || true
-          docker run -d --name myapp-staging -p 3002:3000 myapp:staging
+      - name: Install dependencies
+        run: npm install
 
-  DeployProd:
-    name: Deploy to Production
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [DeployStaging]
-    runs-on: self-hosted
+      - name: Run tests
+        run: npm test
+
+      - name: Build app
+        run: npm run build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Build Docker image (Prod)
-        run: docker build -t myapp:latest .
-      - name: Run Docker container (Prod)
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, Tag, and Push Docker image to ECR
         run: |
-          docker stop myapp-prod || true
-          docker rm myapp-prod || true
-          docker run -d --name myapp-prod -p 3000:3000 myapp:latest
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t my-app:$IMAGE_TAG .
+          docker tag my-app:$IMAGE_TAG ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-app:$IMAGE_TAG
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-app:$IMAGE_TAG
+
+      - name: Deploy to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ecs-task.json
+          service: my-service-${{ github.event.inputs.environment }}
+          cluster: my-cluster
+          wait-for-service-stability: true
