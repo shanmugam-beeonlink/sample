@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: us-east-1          # Cluster region
   ECR_REPOSITORY: my-app
 
 jobs:
@@ -69,6 +69,7 @@ jobs:
         with:
           name: tested-build
 
+      # Uncomment if you have DB migrations
       # - name: Run staging DB migrations
       #   run: npm run migrate:staging
 
@@ -85,6 +86,7 @@ jobs:
         with:
           name: tested-build
 
+      # Uncomment if you have DB migrations
       # - name: Run production DB migrations
       #   run: npm run migrate:production
 
@@ -128,10 +130,10 @@ jobs:
           image: ${{ env.IMAGE }}
 
       - name: Deploy to Staging ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2   # ✅ use SDK v3
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: my-app-task-service-fce9fefl                  # ✅ actual service
+          service: my-app-task-service-fce9fefl
           cluster: fuzzy-panda-t969wx
           wait-for-service-stability: true
 
@@ -175,9 +177,9 @@ jobs:
           image: ${{ env.IMAGE }}
 
       - name: Deploy to Production ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2   # ✅ use SDK v3
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: my-app-task-service-fce9fefl                  # ✅ same service (unless you create a separate prod one)
+          service: my-app-task-service-fce9fefl    # can be same or separate service
           cluster: fuzzy-panda-t969wx
           wait-for-service-stability: true
