@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: ap-south-1
+  AWS_REGION: us-east-1            # ✅ corrected region
   ECR_REPOSITORY: my-app
 
 jobs:
@@ -104,7 +104,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: ecr
@@ -115,7 +115,6 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build Docker image using your Dockerfile
           docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG .
           docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
           echo "IMAGE=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG" >> $GITHUB_ENV
@@ -132,7 +131,7 @@ jobs:
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: my-app-task-service-fce9fefl
+          service: my-app-task-service-fce9fefl   # ✅ replace with actual service name
           cluster: fuzzy-panda-t969wx
           wait-for-service-stability: true
 
@@ -179,6 +178,6 @@ jobs:
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: my-app-prod-service
-          cluster: my-ecs-cluster
+          service: my-app-prod-service           # ✅ replace with actual service name
+          cluster: fuzzy-panda-t969wx
           wait-for-service-stability: true
