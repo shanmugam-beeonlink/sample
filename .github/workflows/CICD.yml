@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: us-east-1            # ✅ corrected region
+  AWS_REGION: us-east-1
   ECR_REPOSITORY: my-app
 
 jobs:
@@ -128,10 +128,10 @@ jobs:
           image: ${{ env.IMAGE }}
 
       - name: Deploy to Staging ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2   # ✅ use SDK v3
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: my-app-task-service-fce9fefl   # ✅ replace with actual service name
+          service: my-app-task-service-fce9fefl                  # ✅ actual service
           cluster: fuzzy-panda-t969wx
           wait-for-service-stability: true
 
@@ -175,9 +175,9 @@ jobs:
           image: ${{ env.IMAGE }}
 
       - name: Deploy to Production ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2   # ✅ use SDK v3
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: my-app-prod-service           # ✅ replace with actual service name
+          service: my-app-task-service-fce9fefl                  # ✅ same service (unless you create a separate prod one)
           cluster: fuzzy-panda-t969wx
           wait-for-service-stability: true
