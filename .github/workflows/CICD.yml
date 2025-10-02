@@ -8,8 +8,14 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: my-app
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+  VPC_ID: ${{ secrets.VPC_ID }}
+  ALB_LISTENER_ARN: ${{ secrets.ALB_LISTENER_ARN }}
+  APP_PORT: ${{ secrets.APP_PORT }}
+  STAGING_SERVICE: ${{ secrets.STAGING_SERVICE }}
+  PRODUCTION_SERVICE: ${{ secrets.PRODUCTION_SERVICE }}
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
 
 jobs:
   # -----------------
@@ -69,9 +75,8 @@ jobs:
         with:
           name: tested-build
 
-      # Uncomment if you have DB migrations
-      # - name: Run staging DB migrations
-      #   run: npm run migrate:staging
+      - name: Run staging DB migrations
+        run: npm run migrate:staging
 
   # -----------------
   # 4. Production migrate
@@ -86,9 +91,8 @@ jobs:
         with:
           name: tested-build
 
-      # Uncomment if you have DB migrations
-      # - name: Run production DB migrations
-      #   run: npm run migrate:production
+      - name: Run production DB migrations
+        run: npm run migrate:production
 
   # -----------------
   # 5. Staging deploy
@@ -98,7 +102,7 @@ jobs:
     needs: staging-migrate
     if: github.ref == 'refs/heads/staging'
     environment:
-      name: staging   # 👈 Approval required
+      name: staging
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -123,6 +127,29 @@ jobs:
           docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
           echo "IMAGE=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG" >> $GITHUB_ENV
 
+      - name: Create Target Group
+        id: tg
+        run: |
+          TG_NAME=my-app-stg-tg-${GITHUB_SHA::8}
+          TG_ARN=$(aws elbv2 create-target-group \
+            --name $TG_NAME \
+            --protocol HTTP \
+            --port $APP_PORT \
+            --vpc-id $VPC_ID \
+            --target-type ip \
+            --health-check-path "/" \
+            --query "TargetGroups[0].TargetGroupArn" \
+            --output text)
+          echo "TG_ARN=$TG_ARN" >> $GITHUB_ENV
+
+      - name: Create Listener Rule
+        run: |
+          aws elbv2 create-rule \
+            --listener-arn $ALB_LISTENER_ARN \
+            --priority 10 \
+            --conditions Field=path-pattern,Values="/*" \
+            --actions Type=forward,TargetGroupArn=$TG_ARN
+
       - name: Render ECS task definition
         id: taskdef
         uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -135,8 +162,8 @@ jobs:
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: my-app-task-service-fce9fefl
-          cluster: fuzzy-panda-t969wx
+          service: ${{ env.STAGING_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
 
   # -----------------
@@ -170,6 +197,29 @@ jobs:
           docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
           echo "IMAGE=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG" >> $GITHUB_ENV
 
+      - name: Create Target Group
+        id: tg
+        run: |
+          TG_NAME=my-app-prod-tg-${GITHUB_SHA::8}
+          TG_ARN=$(aws elbv2 create-target-group \
+            --name $TG_NAME \
+            --protocol HTTP \
+            --port $APP_PORT \
+            --vpc-id $VPC_ID \
+            --target-type ip \
+            --health-check-path "/" \
+            --query "TargetGroups[0].TargetGroupArn" \
+            --output text)
+          echo "TG_ARN=$TG_ARN" >> $GITHUB_ENV
+
+      - name: Create Listener Rule
+        run: |
+          aws elbv2 create-rule \
+            --listener-arn $ALB_LISTENER_ARN \
+            --priority 20 \
+            --conditions Field=path-pattern,Values="/*" \
+            --actions Type=forward,TargetGroupArn=$TG_ARN
+
       - name: Render ECS task definition
         id: taskdef
         uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -182,6 +232,6 @@ jobs:
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: my-app-task-service-fce9fefl  # Can use same service or create separate prod service
-          cluster: fuzzy-panda-t969wx
+          service: ${{ env.PRODUCTION_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
