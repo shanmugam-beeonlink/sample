@@ -97,8 +97,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: staging-migrate
     if: github.ref == 'refs/heads/staging'
-    environment:
-      name: staging   # 👈 Approval required
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
