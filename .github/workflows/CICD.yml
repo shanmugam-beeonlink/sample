@@ -8,7 +8,16 @@ on:
   workflow_dispatch:
 
 env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+  VPC_ID: ${{ secrets.VPC_ID }}
+  ALB_LISTENER_ARN: arn:aws:elasticloadbalancing:${{ secrets.AWS_REGION }}:587054415775:loadbalancer/app/my-app-alb/ddb6503a28d58eeb
+  ALB_LISTENER_ARN: arn:aws:elasticloadbalancing:us-east-1:587054415775:loadbalancer/app/my-app-alb/ddb6503a28d58eeb
+
   APP_PORT: ${{ secrets.APP_PORT }}
+  STAGING_SERVICE: ${{ secrets.STAGING_SERVICE }}
+  PRODUCTION_SERVICE: ${{ secrets.PRODUCTION_SERVICE }}
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
 
 jobs:
   # -----------------
@@ -56,7 +65,7 @@ jobs:
           path: ./
 
   # -----------------
-  # 3. Staging migration
+  # 3. Staging migrate
   # -----------------
   staging-migrate:
     runs-on: ubuntu-latest
@@ -68,12 +77,11 @@ jobs:
         with:
           name: tested-build
 
-      # Uncomment if you have DB migrations
       # - name: Run staging DB migrations
       #   run: npm run migrate:staging
 
   # -----------------
-  # 4. Production migration
+  # 4. Production migrate
   # -----------------
   production-migrate:
     runs-on: ubuntu-latest
@@ -85,7 +93,6 @@ jobs:
         with:
           name: tested-build
 
-      # Uncomment if you have DB migrations
       # - name: Run production DB migrations
       #   run: npm run migrate:production
 
@@ -97,7 +104,7 @@ jobs:
     needs: staging-migrate
     if: github.ref == 'refs/heads/staging'
     environment:
-      name: staging   # approval required
+      name: staging
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -107,7 +114,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: ecr
@@ -118,9 +125,32 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
-          echo "IMAGE=$ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG" >> $GITHUB_ENV
+          docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+          echo "IMAGE=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Create Target Group
+        id: tg
+        run: |
+          TG_NAME=my-app-stg-tg-${GITHUB_SHA::8}
+          TG_ARN=$(aws elbv2 create-target-group \
+            --name $TG_NAME \
+            --protocol HTTP \
+            --port $APP_PORT \
+            --vpc-id $VPC_ID \
+            --target-type ip \
+            --health-check-path "/" \
+            --query "TargetGroups[0].TargetGroupArn" \
+            --output text)
+          echo "TG_ARN=$TG_ARN" >> $GITHUB_ENV
+
+      - name: Create Listener Rule
+        run: |
+          aws elbv2 create-rule \
+            --listener-arn $ALB_LISTENER_ARN \
+            --priority 10 \
+            --conditions Field=path-pattern,Values="/*" \
+            --actions Type=forward,TargetGroupArn=$TG_ARN
 
       - name: Render ECS task definition
         id: taskdef
@@ -129,22 +159,13 @@ jobs:
           task-definition: ecs-task-def.json
           container-name: my-app
           image: ${{ env.IMAGE }}
-          env:
-            AWS_REGION: ${{ secrets.AWS_REGION }}
-            ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-            VPC_ID: ${{ secrets.VPC_ID }}
-            ALB_LISTENER_ARN: ${{ secrets.ALB_LISTENER_ARN }}
-            APP_PORT: ${{ secrets.APP_PORT }}
-            STAGING_SERVICE: ${{ secrets.STAGING_SERVICE }}
-            PRODUCTION_SERVICE: ${{ secrets.PRODUCTION_SERVICE }}
-            ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
 
       - name: Deploy to Staging ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: ${{ secrets.STAGING_SERVICE }}
-          cluster: ${{ secrets.ECS_CLUSTER }}
+          service: ${{ env.STAGING_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
 
   # -----------------
@@ -163,7 +184,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: ecr
@@ -174,9 +195,32 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
-          echo "IMAGE=$ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG" >> $GITHUB_ENV
+          docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+          echo "IMAGE=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Create Target Group
+        id: tg
+        run: |
+          TG_NAME=my-app-prod-tg-${GITHUB_SHA::8}
+          TG_ARN=$(aws elbv2 create-target-group \
+            --name $TG_NAME \
+            --protocol HTTP \
+            --port $APP_PORT \
+            --vpc-id $VPC_ID \
+            --target-type ip \
+            --health-check-path "/" \
+            --query "TargetGroups[0].TargetGroupArn" \
+            --output text)
+          echo "TG_ARN=$TG_ARN" >> $GITHUB_ENV
+
+      - name: Create Listener Rule
+        run: |
+          aws elbv2 create-rule \
+            --listener-arn $ALB_LISTENER_ARN \
+            --priority 20 \
+            --conditions Field=path-pattern,Values="/*" \
+            --actions Type=forward,TargetGroupArn=$TG_ARN
 
       - name: Render ECS task definition
         id: taskdef
@@ -185,20 +229,11 @@ jobs:
           task-definition: ecs-task-def.json
           container-name: my-app
           image: ${{ env.IMAGE }}
-          env:
-            AWS_REGION: ${{ secrets.AWS_REGION }}
-            ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-            VPC_ID: ${{ secrets.VPC_ID }}
-            ALB_LISTENER_ARN: ${{ secrets.ALB_LISTENER_ARN }}
-            APP_PORT: ${{ secrets.APP_PORT }}
-            STAGING_SERVICE: ${{ secrets.STAGING_SERVICE }}
-            PRODUCTION_SERVICE: ${{ secrets.PRODUCTION_SERVICE }}
-            ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
 
       - name: Deploy to Production ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: ${{ secrets.PRODUCTION_SERVICE }}
-          cluster: ${{ secrets.ECS_CLUSTER }}
+          service: ${{ env.PRODUCTION_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true

@@ -15,8 +15,8 @@
             "essential": true,
             "portMappings": [
                 {
-                    "containerPort": "${APP_PORT}",
-                    "hostPort": "${APP_PORT}",
+                    "containerPort": 3000,
+                    "hostPort": 3000,
                     "protocol": "tcp"
                 }
             ],
