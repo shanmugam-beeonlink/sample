@@ -8,12 +8,12 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: ap-south-1
+  AWS_REGION: us-east-1
   ECR_REPOSITORY: my-app
 
 jobs:
   # -----------------
-  # 1. Build (common)
+  # 1. Build
   # -----------------
   build:
     runs-on: ubuntu-latest
@@ -29,9 +29,6 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build app
-        run: npm run build
-
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -39,44 +36,69 @@ jobs:
           path: ./
 
   # -----------------
-  # 2. Staging migration
+  # 2. Test
+  # -----------------
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Upload tested artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tested-build
+          path: ./
+
+  # -----------------
+  # 3. Staging migrate
   # -----------------
   staging-migrate:
     runs-on: ubuntu-latest
-    needs: build
+    needs: test
     if: github.ref == 'refs/heads/staging'
     steps:
-      - name: Download build artifact
+      - name: Download tested artifact
         uses: actions/download-artifact@v4
         with:
-          name: app-build
+          name: tested-build
 
-      - name: Run staging DB migrations
-        run: npm run migrate:staging
+      # Uncomment if you have DB migrations
+      # - name: Run staging DB migrations
+      #   run: npm run migrate:staging
 
   # -----------------
-  # 3. Production migration
+  # 4. Production migrate
   # -----------------
   production-migrate:
     runs-on: ubuntu-latest
-    needs: build
+    needs: test
     if: github.ref == 'refs/heads/production'
     steps:
-      - name: Download build artifact
+      - name: Download tested artifact
         uses: actions/download-artifact@v4
         with:
-          name: app-build
+          name: tested-build
 
-      - name: Run production DB migrations
-        run: npm run migrate:production
+      # Uncomment if you have DB migrations
+      # - name: Run production DB migrations
+      #   run: npm run migrate:production
 
   # -----------------
-  # 4. Staging deploy
+  # 5. Staging deploy
   # -----------------
   staging-deploy:
     runs-on: ubuntu-latest
     needs: staging-migrate
     if: github.ref == 'refs/heads/staging'
+    environment:
+      name: staging   # 👈 Approval required
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -92,7 +114,7 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, Tag, Push Docker image
+      - name: Build, Tag & Push Docker image
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -110,15 +132,15 @@ jobs:
           image: ${{ env.IMAGE }}
 
       - name: Deploy to Staging ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: my-app-staging-service
-          cluster: my-ecs-cluster
+          service: my-app-task-service-fce9fefl
+          cluster: fuzzy-panda-t969wx
           wait-for-service-stability: true
 
   # -----------------
-  # 5. Production deploy
+  # 6. Production deploy
   # -----------------
   production-deploy:
     runs-on: ubuntu-latest
@@ -139,7 +161,7 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, Tag, Push Docker image
+      - name: Build, Tag & Push Docker image
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -157,9 +179,9 @@ jobs:
           image: ${{ env.IMAGE }}
 
       - name: Deploy to Production ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
-          service: my-app-prod-service
-          cluster: my-ecs-cluster
+          service: my-app-task-service-fce9fefl  # Can use same service or create separate prod service
+          cluster: fuzzy-panda-t969wx
           wait-for-service-stability: true
