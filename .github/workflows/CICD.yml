@@ -11,7 +11,7 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
   VPC_ID: ${{ secrets.VPC_ID }}
-  ALB_LISTENER_ARN: arn:aws:elasticloadbalancing:us-east-1:587054415775:loadbalancer/app/my-app-alb/ddb6503a28d58eeb
+  ALB_LISTENER_ARN: arn:aws:elasticloadbalancing:us-east-1:587054415775:listener/app/my-app-alb/ddb6503a28d58eeb/abc1234567890def
   APP_PORT: ${{ secrets.APP_PORT }}
   STAGING_SERVICE: ${{ secrets.STAGING_SERVICE }}
   PRODUCTION_SERVICE: ${{ secrets.PRODUCTION_SERVICE }}
