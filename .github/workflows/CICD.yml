@@ -21,19 +21,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm install
+      - run: npm install
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: app-build
           path: ./
@@ -42,16 +38,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: app-build
 
-      - name: Run tests
-        run: npm test
+      - run: npm test
 
-      - name: Upload tested artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: tested-build
           path: ./
@@ -61,24 +54,24 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/staging'
     steps:
-      - name: Download tested artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: tested-build
-      # - name: Run staging DB migrations
-      #   run: npm run migrate:staging
+
+      # Uncomment to run staging DB migrations
+      # - run: npm run migrate:staging
 
   production-migrate:
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/production'
     steps:
-      - name: Download tested artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: tested-build
-      # - name: Run production DB migrations
-      #   run: npm run migrate:production
+
+      # Uncomment to run production DB migrations
+      # - run: npm run migrate:production
 
   staging-deploy:
     runs-on: ubuntu-latest
@@ -86,32 +79,26 @@ jobs:
     if: github.ref == 'refs/heads/staging'
     environment:
       name: staging
+    env:
+      DEPLOY_ENV: staging
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: ecr
+      - id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, Tag & Push Docker image
-        env:
-          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
-          echo "IMAGE=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG" >> $GITHUB_ENV
+      - run: |
+          docker build -t ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} .
+          docker push ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          echo "IMAGE=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Create Target Group
-        id: tg
+      - id: create-tg
         run: |
           TG_NAME=my-app-stg-tg-${GITHUB_SHA::8}
           TG_ARN=$(aws elbv2 create-target-group \
@@ -125,26 +112,17 @@ jobs:
             --output text)
           echo "TG_ARN=$TG_ARN" >> $GITHUB_ENV
 
-      - name: Create Listener Rule with Dynamic Priority
+      - name: Create Listener Rule
         run: |
-          PRIORITIES=$(aws elbv2 describe-rules --listener-arn $ALB_LISTENER_ARN \
-            --query 'Rules[*].Priority' --output text | tr '\t' '\n' | grep -E '^[0-9]+$' | sort -n)
-
-          NEXT_PRIORITY=10
-          while echo "$PRIORITIES" | grep -qx "$NEXT_PRIORITY"; do
-            NEXT_PRIORITY=$((NEXT_PRIORITY + 1))
-          done
-
-          echo "Next available priority: $NEXT_PRIORITY"
-
+          # Generate a unique priority (e.g. 100 + short SHA) to avoid conflict
+          PRIORITY=$((100 + 0x${GITHUB_SHA:0:4}))
           aws elbv2 create-rule \
             --listener-arn $ALB_LISTENER_ARN \
-            --priority $NEXT_PRIORITY \
+            --priority $PRIORITY \
             --conditions Field=path-pattern,Values="/*" \
             --actions Type=forward,TargetGroupArn=$TG_ARN
 
-      - name: Render ECS task definition
-        id: taskdef
+      - id: render-taskdef
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: ecs-task-def.json
@@ -154,41 +132,45 @@ jobs:
       - name: Deploy to Staging ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
-          task-definition: ${{ steps.taskdef.outputs.task-definition }}
+          task-definition: ${{ steps.render-taskdef.outputs.task-definition }}
           service: ${{ env.STAGING_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
+          load-balancers: |
+            [
+              {
+                "targetGroupArn": "${{ env.TG_ARN }}",
+                "containerName": "my-app",
+                "containerPort": ${{ env.APP_PORT }}
+              }
+            ]
 
   production-deploy:
     runs-on: ubuntu-latest
     needs: production-migrate
     if: github.ref == 'refs/heads/production'
+    environment:
+      name: production
+    env:
+      DEPLOY_ENV: production
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: ecr
+      - id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, Tag & Push Docker image
-        env:
-          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
-          echo "IMAGE=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG" >> $GITHUB_ENV
+      - run: |
+          docker build -t ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} .
+          docker push ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          echo "IMAGE=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Create Target Group
-        id: tg
+      - id: create-tg
         run: |
           TG_NAME=my-app-prod-tg-${GITHUB_SHA::8}
           TG_ARN=$(aws elbv2 create-target-group \
@@ -202,26 +184,16 @@ jobs:
             --output text)
           echo "TG_ARN=$TG_ARN" >> $GITHUB_ENV
 
-      - name: Create Listener Rule with Dynamic Priority
+      - name: Create Listener Rule
         run: |
-          PRIORITIES=$(aws elbv2 describe-rules --listener-arn $ALB_LISTENER_ARN \
-            --query 'Rules[*].Priority' --output text | tr '\t' '\n' | grep -E '^[0-9]+$' | sort -n)
-
-          NEXT_PRIORITY=10
-          while echo "$PRIORITIES" | grep -qx "$NEXT_PRIORITY"; do
-            NEXT_PRIORITY=$((NEXT_PRIORITY + 1))
-          done
-
-          echo "Next available priority: $NEXT_PRIORITY"
-
+          PRIORITY=$((200 + 0x${GITHUB_SHA:0:4}))
           aws elbv2 create-rule \
             --listener-arn $ALB_LISTENER_ARN \
-            --priority $NEXT_PRIORITY \
+            --priority $PRIORITY \
             --conditions Field=path-pattern,Values="/*" \
             --actions Type=forward,TargetGroupArn=$TG_ARN
 
-      - name: Render ECS task definition
-        id: taskdef
+      - id: render-taskdef
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: ecs-task-def.json
@@ -231,7 +203,15 @@ jobs:
       - name: Deploy to Production ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
-          task-definition: ${{ steps.taskdef.outputs.task-definition }}
+          task-definition: ${{ steps.render-taskdef.outputs.task-definition }}
           service: ${{ env.PRODUCTION_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
+          load-balancers: |
+            [
+              {
+                "targetGroupArn": "${{ env.TG_ARN }}",
+                "containerName": "my-app",
+                "containerPort": ${{ env.APP_PORT }}
+              }
+            ]
